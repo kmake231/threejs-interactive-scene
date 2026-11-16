@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { addDetails } from './details.js'
 import { addColliderBox, addWall, createBucket, showColliders } from '../../engine/build.js'
 
 function speckle(bucket, base, spot, count) {
@@ -26,6 +27,15 @@ function speckle(bucket, base, spot, count) {
 function disc(bucket, group, { radius, y, material, walkables }) {
   const geometry = bucket.track(new THREE.CircleGeometry(radius, 72))
   geometry.rotateX(-Math.PI / 2)
+  const positions = geometry.attributes.position
+  for (let i = 1; i < positions.count; i += 1) {
+    const x = positions.getX(i)
+    const z = positions.getZ(i)
+    const angle = Math.atan2(z, x)
+    const edge = 1 + 0.035 * Math.sin(angle * 5) + 0.025 * Math.cos(angle * 9)
+    positions.setXYZ(i, x * edge, 0, z * edge)
+  }
+  geometry.computeVertexNormals()
   const mesh = new THREE.Mesh(geometry, material)
   mesh.position.y = y
   group.add(mesh)
@@ -344,16 +354,6 @@ export function createIslandHouse(content) {
   })
   occluders.push(ceiling)
 
-  const roof = bucket.box(group, {
-    w: house.width + 1.1,
-    h: 0.14,
-    d: house.depth + 1.1,
-    x: 0,
-    y: layout.top + 0.07,
-    z: 0,
-    material: materials.roof,
-  })
-  occluders.push(roof)
   const porchRoof = bucket.box(group, {
     w: content.porch.width + 0.4,
     h: 0.1,
@@ -429,6 +429,8 @@ export function createIslandHouse(content) {
     }
   }
 
+  addDetails(group, bucket, lists, materials, content, layout)
+
   const areas = (content.areas ?? []).map((area) => ({
     id: area.id,
     body: area.body,
@@ -442,6 +444,16 @@ export function createIslandHouse(content) {
   const hemi = new THREE.HemisphereLight('#d5ebe6', '#c6b48a', 0.95)
   const sun = new THREE.DirectionalLight('#fff3df', 2.35)
   sun.position.set(-14, 18, 10)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(2048, 2048)
+  Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 65 })
+  sun.shadow.normalBias = 0.035
+  group.traverse((object) => {
+    if (object.isMesh && object !== water) {
+      object.castShadow = true
+      object.receiveShadow = true
+    }
+  })
   group.add(hemi, sun)
 
   const background = new THREE.Color(content.sky)
